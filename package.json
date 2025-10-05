@@ -2,18 +2,20 @@
   "name": "gatherisbad-media-server",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "node --loader ts-node/esm src/index.ts",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix"
   },
   "author": "Andrew Pinon",
   "license": "ISC",
   "devDependencies": {
     "@eslint/js": "^9.37.0",
+    "@types/express": "^5.0.3",
     "@types/node": "^24.6.2",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
@@ -23,5 +25,12 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.45.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "mediasoup": "^3.19.3",
+    "socket.io": "^4.8.1"
   }
 }
