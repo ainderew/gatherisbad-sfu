@@ -1,9 +1,10 @@
 import express from "express";
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import http from "http";
 import cors from "cors";
 import mediasoup from "mediasoup";
 import dotenv from "dotenv";
+import { ScreenShareService } from "./Services/ScreenShare/ScreenShare";
 dotenv.config();
 
 const app = express();
@@ -16,11 +17,14 @@ const io = new Server(server, {
   },
 });
 
-console.log(process.env.PUBLIC_IP);
+type User = {
+  name: string;
+};
 
 let router: mediasoup.types.Router | undefined;
 const workers: mediasoup.types.Worker[] = [];
 
+const userMap: Record<string, User> = {};
 // Store transports by transport ID
 const transports: Record<string, mediasoup.types.WebRtcTransport> = {};
 
@@ -63,10 +67,36 @@ async function createWorker() {
         mimeType: "video/VP8",
         clockRate: 90000,
       },
+      {
+        kind: "video",
+        mimeType: "video/H264",
+        clockRate: 90000,
+        parameters: {
+          "packetization-mode": 1,
+          "profile-level-id": "42e01f",
+        },
+      },
     ],
   });
 
   return { worker, router };
+}
+
+async function getPublicIP(): Promise<string> {
+  if (process.env.PUBLIC_IP) {
+    console.log("Using PUBLIC_IP from environment:", process.env.PUBLIC_IP);
+    return process.env.PUBLIC_IP;
+  }
+
+  try {
+    const response = await fetch("https://api.ipify.org?format=text");
+    const ip = await response.text();
+    console.log("Detected public IP:", ip);
+    return ip;
+  } catch (err) {
+    console.error("Failed to get public IP, using 127.0.0.1", err);
+    return "127.0.0.1";
+  }
 }
 
 async function startServer() {
@@ -74,8 +104,20 @@ async function startServer() {
   workers.push(worker);
   router = createdRouter;
 
-  io.on("connection", (socket) => {
+  io.on("connection", (socket: Socket) => {
     console.log("Client connected:", socket.id);
+
+    socket.on("setUserInfo", (userData) => {
+      console.log("SET USER INFO - - - -");
+      console.log(userData);
+
+      userMap[socket.id] = userData;
+      console.log(userMap[socket.id]);
+    });
+
+    const screenShareService = new ScreenShareService(socket);
+
+    screenShareService.listenScreenShareEvent();
 
     // Initialize transport tracking for this socket
     socketTransports[socket.id] = [];
@@ -91,9 +133,7 @@ async function startServer() {
       }
 
       const transport = await router.createWebRtcTransport({
-        listenIps: [
-          { ip: "0.0.0.0", announcedIp: process.env.PUBLIC_IP || "127.0.0.1" },
-        ],
+        listenIps: [{ ip: "0.0.0.0", announcedIp: await getPublicIP() }],
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
@@ -176,21 +216,22 @@ async function startServer() {
         // Notify all other clients about the new producer
         socket.broadcast.emit("newProducer", {
           producerId: producer.id,
+          userName: userMap[socket.id].name,
         });
 
         callback({ id: producer.id });
       },
     );
 
-    socket.on("getProducers", (_, callback) => {
+    socket.on("getProducers", (callback) => {
       const allProducers = Object.entries(producers)
-        .filter(([_, data]) => {
+        .filter(([, data]) => {
           const producerSocketId = Object.entries(socketTransports).find(
-            ([_, transportIds]) => transportIds.includes(data.transportId),
+            ([, transportIds]) => transportIds.includes(data.transportId),
           )?.[0];
           return producerSocketId !== socket.id;
         })
-        .map(([id, _]) => ({ producerId: id }));
+        .map(([id]) => ({ producerId: id }));
 
       callback(allProducers);
     });
@@ -328,4 +369,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
