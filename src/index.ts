@@ -218,7 +218,7 @@ async function startServer() {
       },
     );
 
-    socket.on("getProducers", (callback) => {
+    socket.on("getProducers", (_unused, callback) => {
       const allProducers = Object.entries(producers)
         .filter(([, data]) => {
           const producerSocketId = Object.entries(socketTransports).find(
