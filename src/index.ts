@@ -60,6 +60,12 @@ async function createWorker() {
         mimeType: "audio/opus",
         clockRate: 48000,
         channels: 2,
+        parameters: {
+          minptime: 10,
+          useinbandfec: 1,
+          stereo: 1,
+          maxaveragebitrate: 128000,
+        },
       },
       {
         kind: "video",
@@ -313,6 +319,12 @@ async function startServer() {
         });
       },
     );
+
+    socket.on("producerClosed", (data) => {
+      console.log("PRODUCER CLOSED", data);
+
+      socket.broadcast.emit("endScreenShare", data);
+    });
 
     socket.on("resumeConsumer", async ({ consumerId }, callback) => {
       const consumerData = consumers[consumerId];
