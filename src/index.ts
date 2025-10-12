@@ -4,7 +4,6 @@ import http from "http";
 import cors from "cors";
 import mediasoup from "mediasoup";
 import dotenv from "dotenv";
-import { ScreenShareService } from "./Services/ScreenShare/ScreenShare";
 dotenv.config();
 
 const app = express();
@@ -115,10 +114,6 @@ async function startServer() {
       console.log(userMap[socket.id]);
     });
 
-    const screenShareService = new ScreenShareService(socket);
-
-    screenShareService.listenScreenShareEvent();
-
     // Initialize transport tracking for this socket
     socketTransports[socket.id] = [];
 
@@ -216,7 +211,7 @@ async function startServer() {
         // Notify all other clients about the new producer
         socket.broadcast.emit("newProducer", {
           producerId: producer.id,
-          userName: userMap[socket.id].name,
+          userName: userMap[socket.id]?.name,
         });
 
         callback({ id: producer.id });
