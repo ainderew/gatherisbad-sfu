@@ -4,6 +4,7 @@ import http from "http";
 import cors from "cors";
 import mediasoup from "mediasoup";
 import dotenv from "dotenv";
+import { ChatService } from "./Services/ChatService.js";
 dotenv.config();
 
 const app = express();
@@ -110,6 +111,9 @@ async function startServer() {
   router = createdRouter;
 
   io.on("connection", (socket: Socket) => {
+    const chatService = new ChatService(socket);
+    chatService.listenForMessage();
+
     console.log("Client connected:", socket.id);
 
     socket.on("setUserInfo", (userData) => {
@@ -182,7 +186,7 @@ async function startServer() {
 
     socket.on(
       "produce",
-      async ({ kind, rtpParameters, transportId }, callback) => {
+      async ({ kind, rtpParameters, transportId, appData }, callback) => {
         let selectedTransportId = transportId;
 
         if (!selectedTransportId) {
@@ -202,22 +206,17 @@ async function startServer() {
           `Producing on transport ${selectedTransportId} for socket ${socket.id}`,
         );
 
-        const producer = await transport.produce({ kind, rtpParameters });
+        const producer = await transport.produce({
+          kind,
+          rtpParameters,
+          appData,
+        });
         producers[producer.id] = { producer, transportId: selectedTransportId };
 
-        console.log(
-          "Producer created:",
-          producer.id,
-          "for socket:",
-          socket.id,
-          "kind:",
-          kind,
-        );
-
-        // Notify all other clients about the new producer
-        socket.broadcast.emit("newProducer", {
+        io.emit("newProducer", {
           producerId: producer.id,
           userName: userMap[socket.id]?.name,
+          source: producer.appData.source,
         });
 
         callback({ id: producer.id });
@@ -225,14 +224,20 @@ async function startServer() {
     );
 
     socket.on("getProducers", (_unused, callback) => {
-      const allProducers = Object.entries(producers)
-        .filter(([, data]) => {
+      const allProducers = Array.from(Object.values(producers))
+        .filter((data) => {
           const producerSocketId = Object.entries(socketTransports).find(
             ([, transportIds]) => transportIds.includes(data.transportId),
           )?.[0];
           return producerSocketId !== socket.id;
         })
-        .map(([id]) => ({ producerId: id }));
+        .map((data) => ({
+          producerId: data.producer.id,
+          socketId: Object.entries(socketTransports).find(([, transportIds]) =>
+            transportIds.includes(data.transportId),
+          )?.[0],
+          source: data.producer.appData.source,
+        }));
 
       callback(allProducers);
     });
@@ -240,14 +245,6 @@ async function startServer() {
     socket.on(
       "consume",
       async ({ producerId, rtpCapabilities, transportId }, callback) => {
-        console.log("=== CONSUME REQUEST ===");
-        console.log("Producer ID:", producerId);
-        console.log("Requested transport ID:", transportId);
-        console.log(
-          "Available transports for socket:",
-          socketTransports[socket.id],
-        );
-
         const producerData = producers[producerId];
         if (!producerData) {
           console.error("Producer not found:", producerId);
@@ -258,7 +255,6 @@ async function startServer() {
           throw new Error("Router not initialized");
         }
 
-        // Check if router can consume
         if (!router.canConsume({ producerId, rtpCapabilities })) {
           console.error("Cannot consume - incompatible RTP capabilities");
           return callback({ error: "Cannot consume" });
@@ -340,7 +336,6 @@ async function startServer() {
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
 
-      // Clean up all transports for this socket
       const transportIds = socketTransports[socket.id] || [];
       transportIds.forEach((id) => {
         const transport = transports[id];
@@ -351,7 +346,6 @@ async function startServer() {
       });
       delete socketTransports[socket.id];
 
-      // Clean up producers
       Object.entries(producers).forEach(([id, data]) => {
         if (transportIds.includes(data.transportId)) {
           data.producer.close();
