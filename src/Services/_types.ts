@@ -7,3 +7,8 @@ export type Message = {
   gifUrl?: string;
   imageUrl?: string;
 };
+
+export type EmojiData = {
+  emoji: string;
+  playerId: string;
+};

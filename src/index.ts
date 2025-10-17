@@ -5,6 +5,7 @@ import cors from "cors";
 import mediasoup from "mediasoup";
 import dotenv from "dotenv";
 import { ChatService } from "./Services/ChatService.js";
+import { ReactionService } from "./Services/ReactionService.js";
 dotenv.config();
 
 const app = express();
@@ -112,13 +113,16 @@ async function startServer() {
 
   io.on("connection", (socket: Socket) => {
     const chatService = new ChatService(socket);
+    const reactionService = new ReactionService(socket);
+
     chatService.listenForMessage();
+    reactionService.listenForReactions();
 
     console.log("Client connected:", socket.id);
 
     socket.on("setUserInfo", (userData) => {
       console.log("SET USER INFO - - - -");
-      console.log(userData);
+      console.log(`Socket ${socket.id} set user info:`, userData);
 
       userMap[socket.id] = userData;
       console.log(userMap[socket.id]);
