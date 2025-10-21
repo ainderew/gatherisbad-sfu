@@ -217,11 +217,19 @@ async function startServer() {
         });
         producers[producer.id] = { producer, transportId: selectedTransportId };
 
-        io.emit("newProducer", {
-          producerId: producer.id,
-          userName: userMap[socket.id]?.name,
-          source: producer.appData.source,
-        });
+        if (kind === "audio") {
+          socket.broadcast.emit("newProducer", {
+            producerId: producer.id,
+            userName: userMap[socket.id]?.name,
+            source: producer.appData.source,
+          });
+        } else {
+          io.emit("newProducer", {
+            producerId: producer.id,
+            userName: userMap[socket.id]?.name,
+            source: producer.appData.source,
+          });
+        }
 
         callback({ id: producer.id });
       },
@@ -323,7 +331,8 @@ async function startServer() {
     socket.on("producerClosed", (data) => {
       console.log("PRODUCER CLOSED", data);
 
-      socket.broadcast.emit("endScreenShare", data);
+      io.emit("endScreenShare", data);
+      // socket.broadcast.emit("endScreenShare", data);
     });
 
     socket.on("resumeConsumer", async ({ consumerId }, callback) => {
