@@ -6,6 +6,7 @@ import mediasoup from "mediasoup";
 import dotenv from "dotenv";
 import { ChatService } from "./Services/ChatService.js";
 import { ReactionService } from "./Services/ReactionService.js";
+import { FocusModeService } from "./Services/FocusModeService.js";
 dotenv.config();
 
 const app = express();
@@ -18,8 +19,9 @@ const io = new Server(server, {
   },
 });
 
-type User = {
+export type User = {
   name: string;
+  isInFocusMode: boolean;
 };
 
 let router: mediasoup.types.Router | undefined;
@@ -114,9 +116,11 @@ async function startServer() {
   io.on("connection", (socket: Socket) => {
     const chatService = new ChatService(socket);
     const reactionService = new ReactionService(socket);
+    const focusModeService = new FocusModeService(socket);
 
     chatService.listenForMessage();
     reactionService.listenForReactions();
+    focusModeService.listenForFocusModeChange(userMap);
 
     console.log("Client connected:", socket.id);
 
@@ -124,6 +128,7 @@ async function startServer() {
       console.log("SET USER INFO - - - -");
       console.log(`Socket ${socket.id} set user info:`, userData);
 
+      userData.isInFocusMode = false;
       userMap[socket.id] = userData;
       console.log(userMap[socket.id]);
     });
